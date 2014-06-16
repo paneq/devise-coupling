@@ -4,7 +4,7 @@
 	<head>
 		<meta charset="utf-8">
 
-		<title>Value objects & aggregates in Ruby on Rails. 2014 Robert Pankowecki</title>
+		<title>Devise & User - a talk about coupling. 2014 Robert Pankowecki</title>
 
 		<meta name="description" content="Value objects, aggregates in Ruby on Rails">
 		<meta name="author" content="Robert Pankowecki">
@@ -45,13 +45,13 @@
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#4d7e65" data-background-transition="slide" -->
-            # Value object'y, agregaty i inne #sf
+            # Devise & User
           </script>
         </section>
 
         <section data-markdown style="">
           <script type="text/template">
-          <!-- .slide: data-transition="linear" data-background="./DSCN0761.jpg" data-background-transition="slide" -->
+          <!-- .slide: data-transition="linear" data-background="./DSCN1000-cartoon.jpg" data-background-transition="slide" -->
             robert @pankowecki
 
             @arkency
@@ -61,9 +61,7 @@
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#2d1c55" data-background-transition="slide" -->
-          ## Why such talk?
-
-          DDD by Evans
+          ## We use devise (everything?) wrong and someone must speak about it ;)
           </script>
         </section>
 
@@ -72,234 +70,70 @@
           <!-- .slide: data-transition="linear" data-background="#86472d" data-background-transition="slide" -->
           ## Agenda
 
-          ### value objects
-          ### aggregates
-          ### \#sf
+          ### wrong
+          ### wrong
+          ### wrong
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#161c09" data-background-transition="slide" -->
-          ## Value objects
+          ## What's devise?
 
-          * attributes define identity/equality
-          * immutable
+           flexible authentication solution for Rails based on Warden
+
+           composed of 10 modules
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#717828" data-background-transition="slide" -->
-          
-          ## YearMonth
-          
-          <pre><code data-trim contenteditable class="ruby">
-class YearMonth < Struct.new(:year, :month)
-  include Comparable
+          ## What do we do with Devise?
 
-  def initialize(year, month)
-    raise ArgumentError unless Fixnum === year
-    raise ArgumentError unless Fixnum === month
-    raise ArgumentError unless year >= 0
-    raise ArgumentError unless month >= 0 && month <= 12
-
-    super
-  end
-
-  def next
-    if month == 12
-      self.class.new(year+1, 1)
-    else
-      self.class.new(year, month+1)
-    end
-  end
-  alias_method :succ, :next
-
-  def <=>(other)
-    (year <=> other.year).nonzero? || month <=> other.month
-  end
-
-  def beginning_of
-    Time.new(year, month, 1)
-  end
-
-  def end_of
-    beginning_of.end_of_month
-  end
-
-  private :year=, :month=
-end
-
-may2014  = YearMonth.new(2014, 5)
-may2014  == YearMonth.new(2014, 5) # true
-june2014 = may2014.next
-          </code></pre>
-          </script>
-          
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#566a23" data-background-transition="slide" -->
-          ## YearMonth in AR
+          ## We put it in User?
           
           <pre><code data-trim contenteditable class="ruby">
-class SalesforceConfiguration < ActiveRecord::Migration
-  def up
-    create_table :salesforces, id: false do |t|
-      t.integer :start_year,  null: false
-      t.integer :start_month, null: false
-
-      t.integer :end_year,  null: false
-      t.integer :end_month, null: false
-    end
-
-    execute "INSERT INTO salesforces VALUES(2013, 10, 2014, 7)"
-  end
-
-  def down
-    drop_table :salesforces
-  end
-end
-
-class Reporting::Salesforce::Configuration < ActiveRecord::Base
-  self.table_name = "salesforces"
-  composed_of :start, class_name: YearMonth.name, mapping: [ %w(start_year year), %w(start_month month) ]
-  composed_of :end,   class_name: YearMonth.name, mapping: [ %w(end_year year), %w(end_month month) ]
-
-  def each_month
-    (self.start..self.end)
-  end
-end
-
-Configuration.first!.each_month.map do |m|
- "Organization revenue #{m.year}-#{'%02d' % m.month}"
+class User
+  devise :database_authenticatable, :registerable,
+    :recoverable, :rememberable, :trackable, :validatable,
+    :token_authenticatable, :lockable, :timeoutable, :omniauthable,
+    :remember_for => 6.months
 end
           </code></pre>
+
+          ☹
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#13343a" data-background-transition="slide" -->
-          ## SchoolYear
+          ## Fact #1
 
-          <pre><code data-trim contenteditable class="ruby">
-class SchoolYear < Struct.new(:start_year, :end_year)
-  def self.from_date(date)
-    year = date.year
-    if date < Date.new(year, 8, 1)
-      new(year-1, year)
-    else
-      new(year, year+1)
-    end
-  end
-
-  def self.from_id(id)
-    start_year, end_year = *id.split("-")
-    start_year = Integer(start_year)
-    end_year   = Integer(end_year)
-    new(start_year, end_year)
-  end
-
-  def self.from_years(start_year_string, end_year_string)
-    new( Integer(start_year_string), Integer(end_year_string) )
-  end
-
-  def self.current
-    from_date(Date.current)
-  end
-
-  def initialize(start_year, end_year)
-    raise ArgumentError unless Fixnum === start_year
-    raise ArgumentError unless Fixnum === end_year
-    raise ArgumentError unless start_year >= 0
-    raise ArgumentError unless start_year+1 == end_year
-    super(start_year, end_year)
-  end
-
-  def name
-    [start_year, end_year].join("/")
-  end
-
-  def id
-    [start_year, end_year].join("-")
-  end
-
-  def next
-    self.class.new(start_year.next, end_year.next)
-  end
-
-  def prev
-    self.class.new(start_year.prev, end_year.prev)
-  end
-
-  def starts_at
-    Date.new(start_year, 8, 1)
-  end
-
-  def ends_at
-    Date.new(end_year, 7, 31)
-  end
-
-  private :start_year=, :end_year=
-end
-
-school_year  = SchoolYear.current
-sy_2013_2014 = SchoolYear.from_id("2014-2015")
-sy_2014_2015 = SchoolYear.new(2014, 2015)
-sy_2015_2016 = SchoolYear.from_years("2014", "2015")
-          </code></pre>
+          `User` class has a tendency for becoming [God-object](http://en.wikipedia.org/wiki/God_object)
+          in monolithic rails apps
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#40152f" data-background-transition="slide" -->
-          ## SchoolYear in AR - serialize, deserialize
+          ## Oh god...
           
-          <pre><code data-trim contenteditable class="ruby">
-module School
-  module SchoolYearSerializer
-    def school_year=(sy)
-      self['school_year_id']= sy.id
-    end
-
-    def school_year
-      id = self['school_year_id']
-      return nil if id.nil?
-      SchoolYear.from_id(id)
-    end
-  end
-end
-          </code></pre>
-          </script>
-        </section>
-
-        <section data-markdown>
-          <script type="text/template">
-          <!-- .slide: data-transition="linear" data-background="#2e4e8b" data-background-transition="slide" -->
-          ## Klass with SchoolYear
-
-<pre><code data-trim contenteditable class="ruby">
-create_table "school_classes", :force => true do |t|
-  t.integer  "school_id",      :null => false
-  t.string   "school_year_id", :null => false
-  t.integer  "number",         :null => false
-  t.string   "letter",         :null => false
-end
-
-module School
-  class Klass < ActiveRecord::Base
-    include SchoolYearSerializer
-  end
-end
-
-Klass.first!.school_year
-Klass.new.tap{|k| k.school_year = SchoolYear.new(2015, 2015)}
-Klass.where(school_year_id: SchoolYear.new(2013, 2014).id)
+          <pre><code data-trim contenteditable class="bash">
+          wc -l app/models/user.rb
+348 app/models/user.rb
+528 app/models/user.rb
+508 app/models/user.rb
+762 app/models/user.rb
 </code></pre>
           </script>
         </section>
@@ -307,138 +141,117 @@ Klass.where(school_year_id: SchoolYear.new(2013, 2014).id)
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#0d0405" data-background-transition="slide" -->
-          ## Language & Dictionary
+          ## Fact #2
 
-          Something went wrong! ;) Should be Value Objects
+          Adding `devise` does not help in counteracting Fact #1
 
           <pre><code data-trim contenteditable class="ruby">
-create_table "dictionaries", :force => true do |t|
-  t.integer  "source_language_id"
-  t.integer  "target_language_id"
-  t.string   "source_language_shortcut"
-  t.string   "target_language_shortcut"
-end
-
-create_table "languages", :force => true do |t|
-  t.string   "name"
-  t.string   "shortcut"
-end
-
-class Language < ActiveRecord::Base
-  ALLOWED_LANGUAGE_SHORTCUTS = %w(cs da de el en es fr hu it la lb nl no pl pt ru sl sv tr zh)
-
-  attr_readonly :shortcut
-  validates :shortcut, inclusion: { in: ALLOWED_LANGUAGE_SHORTCUTS }
-
-  scope :by_shortcut, order('shortcut')
-
-  def as_json
-    {
-      shortcut: shortcut,
-      name: translated_shortcut
-    }
-  end
-
-  def translated_shortcut
-    _('lang_' + shortcut)
-  end
-
-  def self.allowed?(shortcut)
-    ALLOWED_LANGUAGE_SHORTCUTS.include?(shortcut)
-  end
-
-  def for_select
-    [translated_shortcut, shortcut]
-  end
-
-  def self.german_lang_select
-    [[_("Source language"), :source], [_("Target language"), :target]]
-  end
-
-  def accents
-    return ['en_gb', 'en_us'] if shortcut == 'en'
-    return ['pt_pt', 'pt_br'] if shortcut == 'pt'
-    return [] if %w(la hu sl).include?(shortcut)
-    [shortcut]
-  end
-end
-
-class Dictionary < ActiveRecord::Base
-  has_many :products, dependent: :destroy
-  has_many :lessons, dependent: :destroy, inverse_of: :dictionary
-  has_many :vocabulary_tests, class_name: "School::VocabularyTest", dependent: :destroy, inverse_of: :dictionary
-  has_many :lesson_categories, through: :lessons, order: "parent_id", uniq: true
-  has_many :default_lessons, class_name: "Lesson", conditions: {default: true}
-  has_many :code_lessons, class_name: "Lesson", through: :products, source: :lessons
-  has_many :student_dictionaries, dependent: :destroy
-  has_many :student_current_dictionaries, class_name: "Student", foreign_key: :current_dictionary_id, dependent: :nullify
-  has_many :students, through: :student_dictionaries
-  belongs_to :source_language,
-              class_name: "Language",
-              primary_key: :shortcut,
-              foreign_key: :source_language_shortcut
-  belongs_to :target_language,
-              class_name: "Language",
-              primary_key: :shortcut,
-              foreign_key: :target_language_shortcut
-
-  validates_presence_of :source_language
-  validates_presence_of :target_language
-
-  delegate :name, to: :source_language, prefix: true, allow_nil: true
-  delegate :name, to: :target_language, prefix: true, allow_nil: true
-
-  def paid_products
-    products.paid.includes(:lessons)
-  end
-
-  def name
-    [_("lang_#{source_language_shortcut}"), _("lang_#{target_language_shortcut}")].join(" - ")
-  end
-
-  def short_name
-    [source_language_shortcut, target_language_shortcut].join("-")
-  end
-
-  def mirror
-    self.class.where(
-      source_language_shortcut: target_language_shortcut,
-      target_language_shortcut: source_language_shortcut
-    ).first_or_create!
-  end
-
-  def create_lesson(params, student=nil)
-    lessons.new(params).tap do |lesson|
-      if student.present?
-        lesson.student = student
-        lesson.students << student
-      end
-      lesson.save
-    end
-  end
-
-  def self.for_dictionary_name shortcut
-    source, target = shortcut.to_s.split("-")
-    for_shortcuts(source, target)
-  end
-
-  def self.for_shortcuts(src, tgt)
-    src_lang = Language.find_or_create_by_shortcut(src)
-    tgt_lang = Language.find_or_create_by_shortcut(tgt)
-    return unless [src_lang, tgt_lang].all?(&:valid?)
-    where(source_language_shortcut: src, target_language_shortcut: tgt).first_or_create
-  end
-
-  def self.default_dictionary_for(locale)
-    supported_locales = ["de", "el", "es", "fr", "it", "pl", "pt", "ru", "sl", "tr"]
-
-    if supported_locales.include?(locale.to_s)
-      for_shortcuts(locale.to_s, "en")
-    else
-      for_shortcuts("en", "de")
-    end
-  end
-end
+Devise::Models.constants.sort.each {|c| Devise::Models.const_get(c).instance_methods.each{|m| puts "#{c}##{m}"  }  }; "
+Authenticatable#valid_for_authentication?
+Authenticatable#unauthenticated_message
+Authenticatable#active_for_authentication?
+Authenticatable#inactive_message
+Authenticatable#authenticatable_salt
+Authenticatable#serializable_hash
+Authenticatable#devise_mailer
+Authenticatable#send_devise_notification
+Authenticatable#downcase_keys
+Authenticatable#strip_whitespace
+Authenticatable#apply_to_attribute_or_variable
+Confirmable#confirm!
+Confirmable#confirmed?
+Confirmable#pending_reconfirmation?
+Confirmable#send_confirmation_instructions
+Confirmable#resend_confirmation_token
+Confirmable#active_for_authentication?
+Confirmable#inactive_message
+Confirmable#skip_confirmation!
+Confirmable#skip_confirmation_notification!
+Confirmable#skip_reconfirmation!
+Confirmable#send_on_create_confirmation_instructions
+Confirmable#confirmation_required?
+Confirmable#confirmation_period_valid?
+Confirmable#confirmation_period_expired?
+Confirmable#pending_any_confirmation
+Confirmable#generate_confirmation_token
+Confirmable#generate_confirmation_token!
+Confirmable#after_password_reset
+Confirmable#postpone_email_change_until_confirmation
+Confirmable#postpone_email_change?
+Confirmable#reconfirmation_required?
+Confirmable#send_confirmation_notification?
+Confirmable#distance_of_time_in_words
+Confirmable#time_ago_in_words
+Confirmable#distance_of_time_in_words_to_now
+Confirmable#date_select
+Confirmable#time_select
+Confirmable#datetime_select
+Confirmable#select_datetime
+Confirmable#select_date
+Confirmable#select_time
+Confirmable#select_second
+Confirmable#select_minute
+Confirmable#select_hour
+Confirmable#select_day
+Confirmable#select_month
+Confirmable#select_year
+Confirmable#time_tag
+DatabaseAuthenticatable#password=
+DatabaseAuthenticatable#valid_password?
+DatabaseAuthenticatable#clean_up_passwords
+DatabaseAuthenticatable#update_with_password
+DatabaseAuthenticatable#update_without_password
+DatabaseAuthenticatable#destroy_with_password
+DatabaseAuthenticatable#after_database_authentication
+DatabaseAuthenticatable#authenticatable_salt
+DatabaseAuthenticatable#password_digest
+Lockable#lock_strategy_enabled?
+Lockable#unlock_strategy_enabled?
+Lockable#lock_access!
+Lockable#unlock_access!
+Lockable#access_locked?
+Lockable#send_unlock_instructions
+Lockable#resend_unlock_token
+Lockable#active_for_authentication?
+Lockable#inactive_message
+Lockable#valid_for_authentication?
+Lockable#unauthenticated_message
+Lockable#attempts_exceeded?
+Lockable#generate_unlock_token
+Lockable#generate_unlock_token!
+Lockable#lock_expired?
+Lockable#if_access_locked
+Recoverable#reset_password!
+Recoverable#send_reset_password_instructions
+Recoverable#reset_password_period_valid?
+Recoverable#should_generate_reset_token?
+Recoverable#generate_reset_password_token
+Recoverable#generate_reset_password_token!
+Recoverable#clear_reset_password_token
+Recoverable#after_password_reset
+Rememberable#remember_me
+Rememberable#remember_me=
+Rememberable#extend_remember_period
+Rememberable#extend_remember_period=
+Rememberable#remember_me!
+Rememberable#forget_me!
+Rememberable#remember_expired?
+Rememberable#remember_expires_at
+Rememberable#rememberable_value
+Rememberable#rememberable_options
+Rememberable#generate_remember_token?
+Rememberable#generate_remember_timestamp?
+Timeoutable#timedout?
+Timeoutable#timeout_in
+TokenAuthenticatable#reset_authentication_token
+TokenAuthenticatable#reset_authentication_token!
+TokenAuthenticatable#ensure_authentication_token
+TokenAuthenticatable#ensure_authentication_token!
+TokenAuthenticatable#after_token_authentication
+TokenAuthenticatable#expire_auth_token_on_timeout
+Trackable#update_tracked_fields!
+Validatable#password_required?
+Validatable#email_required?"
           </code></pre>
           </script>
         </section>
@@ -446,383 +259,210 @@ end
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#4b2119" data-background-transition="slide" -->
-          ## Aggregates
+          ## Opinion #1
+
+          Biggest rails apps problem: lack of modularity
+
+          <pre><code data-trim contenteditable class="ruby">
+          class User
+            # wannabe module A if anyone cares
+            has_many :alphas
+            has_many :betas
+            has_many :gammas
+            has_many :deltas
+
+            # wannabe module B if we only had time to refactor someday
+            has_many :sigmas
+            has_many :epsilons
+            has_many :lambdas
+
+            # maybe on hackathon day in our company
+            has_many :has_many
+
+            # nope...
+            # too many exception
+          end
+          </code></pre>
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#712673" data-background-transition="slide" -->
-          ## First, AGGREGATES tighten up the model itself by defining clear ownership and boundaries, avoiding a chaotic, tangled web of objects. This pattern is crucial to maintaining integrity in all phases of the life cycle.
+          ## Opinion #2: Wrong modularity
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
-          <!-- .slide: data-transition="linear" data-background="#2d4286" data-background-transition="slide" -->
-          ### Ownership
-          ### Boundaries
-          ### Avoid chaos
-
-          [\[tweet\]](https://twitter.com/pankowecki/status/466682151048871936)
+          <!-- .slide: data-transition="linear" data-background="./modularity.png" data-background-transition="slide" -->
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#763c27" data-background-transition="slide" -->
-          ## Cluster the ENTITIES and VALUE OBJECTS into AGGREGATES and define boundaries around each. Choose one ENTITY to be the root of each AGGREGATE, and control all access to the objects inside the boundary through the root
+          ## Fact #3
+
+          <pre><code data-trim contenteditable class="ruby">
+# ==> Configuration for :database_authenticatable
+# For bcrypt, this is the cost for hashing the password and defaults to 10. If
+# using other encryptors, it sets how many times you want the password re-encrypted.
+#
+# Limiting the stretches to just one in testing will increase the performance of
+# your test suite dramatically. However, it is STRONGLY RECOMMENDED to not use
+# a value less than 10 in other environments.
+config.stretches = Rails.env.test? ? 1 : 10
+          </code></pre>
+
+          _will increase the performance of your test suite dramatically !!!111oneoneone_
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#8faf3a" data-background-transition="slide" -->
-          ### Root
-          ### Control access
-
-          [\[tweet\]](https://twitter.com/pankowecki/status/466687074796830720)
+          ## WHY?
+          
+          _will increase the performance of your test suite dramatically !!!_
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#3b8db1" data-background-transition="slide" -->
-          ### An AGGREGATE is a cluster of associated objects that we treat as a unit for the purpose of data changes. Each AGGREGATE has a root and a boundary. The boundary defines what is inside the AGGREGATE. The root is a single, specific ENTITY contained in the AGGREGATE. The root is the only member of the AGGREGATE that outside objects are allowed to hold references to, although objects within the boundary may hold references to each other. ENTITIES other than the root have local identity, but that identity needs to be distinguishable only within the AGGREGATE, because no outside object can ever see it out of the context of the root ENTITY
-          
+          ## We are all fools!
+
+          <pre><code data-trim contenteditable class="ruby">
+FactoryGirl.define do
+  factory :user do
+    email    { generate(:email) }
+    password { generate(:password) }
+  end
+end
+          </code></pre>
+
+          who coupled authentication concerns (like _having password_) to all our test suits that require
+          `User` object (in _domain_ sense)
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#42b53c" data-background-transition="slide" -->
-          ### Purpose of data change
-          ### The boundary defines what is inside the AGGREGATE
-          
-          [\[tweet\]](https://twitter.com/pankowecki/status/466684508688121857)
+          ## How many of your tests does actually care for the user password?
+
+          or _encrypted password_
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#41501b" data-background-transition="slide" -->
-          ## An object should be distilled until nothing remains that does not relate to its meaning or support its role in interactions.
+          ## Can't we build/create user without password and be happy?
 
+          maybe just in _Invoicing_, _Inventory_ or _Digital Product_ moduls tests?
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#42b53c" data-background-transition="slide" -->
-          ## How many things do we add to our models because "Views"?
+          ## One more thing
           
-          [\[tweet\]](https://twitter.com/pankowecki/status/467020561177001985)
-
-          [Changing the mindset - more object-oriented view at the business domain modeling](http://prezi.com/v9lvosve93i3/changing-the-mindset-more-object-oriented-view-at-the-business-domain-modeling/)
+          or two...
           </script>
-        </section>
-
-        <section data-transition="linear" data-background-transition="slide" data-background="#2e4e8b">
-          <h2>Billing</h2>
-          <pre><code data-trim contenteditable class="ruby">
-require "not_activerecord"
-require "dependor/shorty"
-
-#removed configuration options for clarity
-
-create_table :school_billing_licenses, id: false do |t|
-  t.string    :id
-  t.integer   :school_id
-  t.integer   :pupil_id
-  t.datetime  :activated_at
-  t.string    :native_language
-  t.string    :learning_language
-  t.string    :school_year_id
-  t.datetime  :deactivated_at
-end
-
-create_table :school_billing_subscriptions, id: false do |t|
-  t.string    :id
-  t.integer   :school_id
-  t.string    :native_language
-  t.string    :learning_language
-  t.string    :school_year_id
-  t.integer   :bought_licenses
-  t.integer   :used_licenses
-  t.decimal   :price
-end
-
-create_table :school_billing_purchases, id: false do |t|
-  t.string    :id
-  t.integer   :school_id
-  t.string    :native_language
-  t.string    :learning_language
-  t.string    :school_year_id
-  t.integer   :bought_licenses
-  t.decimal   :price
-  t.datetime  :purchased_at
-end
-
-class Billing < ActiveRecord::Base
-  class Subscription < ActiveRecord::Base
-    include SchoolYearSerializer
-    extend  NotActiveRecord
-
-    does_not_belong_to :school
-
-    def dictionary_name
-      s_("School|lang_" + learning_language)
-    end
-
-    def overused?
-      used_licenses > bought_licenses
-    end
-
-    def cancelable?
-      bought_licenses.nonzero?
-    end
-  end
-
-  class License < ActiveRecord::Base
-    include SchoolYearSerializer
-    extend  NotActiveRecord
-
-    does_not_belong_to :school
-    does_not_belong_to :pupil
-  end
-
-  class Purchase < ActiveRecord::Base
-    include SchoolYearSerializer
-    extend  NotActiveRecord
-
-    does_not_belong_to :school
-  end
-
-  class SubscriptionPriceCalculator
-    takes :school_year, :bought_licenses, :now
-
-    def price
-      raise ArgumentError if months_to_pay >= 13
-      raise ArgumentError if months_to_pay <= 0
-
-      price = price_per_license * bought_licenses * BigDecimal.new(months_to_pay) / BigDecimal.new(12)
-      price.round(2, BigDecimal::ROUND_HALF_UP)
-    end
-
-    private
-
-    def months_to_pay
-      if now < school_year.starts_at
-        12
-      else
-        (school_year.ends_at.year * 12 + school_year.ends_at.month) - (now.year * 12 + now.month) + 1
-      end
-    end
-
-    def price_per_license
-      BigDecimal.new("2.5")
-    end
-  end
-
-  self.table_name = "schools"
-
-  has_many :subscriptions, class_name: "::School::Billing::Subscription", foreign_key: "school_id", autosave: true
-  has_many :licenses,      class_name: "::School::Billing::License",      foreign_key: "school_id", autosave: true
-  has_many :purchases,     class_name: "::School::Billing::Purchase",     foreign_key: "school_id", autosave: true
-
-  def used_licenses(pupil_ids, native_language, learning_languages, school_year, at_time)
-    pupil_ids = Array.wrap(pupil_ids)
-    Array.wrap(learning_languages).each do |learning_language|
-      s = subscription_for(native_language, learning_language, school_year)
-      s.used_licenses += pupil_ids.size
-      pupil_ids.each do |pupil_id|
-        licenses.build do |l|
-          l.id                = SecureRandom.uuid
-          l.pupil_id          = pupil_id
-          l.activated_at      = at_time
-          l.native_language   = native_language
-          l.learning_language = learning_language
-          l.school_year       = school_year
-        end
-      end
-    end
-  end
-
-  def terminated_licenses(pupil_ids, native_language, learning_languages, school_year, at_time)
-    pupil_ids = Array.wrap(pupil_ids)
-    Array.wrap(learning_languages).each do |learning_language|
-      s = subscription_for(native_language, learning_language, school_year)
-      s.used_licenses -= pupil_ids.size
-      pupil_ids.each do |pupil_id|
-        license = licenses.find do |l|
-          l.pupil_id == pupil_id &&
-          l.native_language == native_language &&
-          l.learning_language == learning_language &&
-          l.school_year == school_year &&
-          l.deactivated_at.nil?
-        end
-        license.deactivated_at = at_time
-      end
-    end
-  end
-
-  def subscriptions_for(native_language, learning_languages, school_years)
-    Array.wrap(learning_languages).map do |ll|
-      Array.wrap(school_years).map do |sy|
-        subscriptions.find do |s|
-          s.native_language == native_language &&
-          s.learning_language == ll &&
-          s.school_year == sy
-        end || subscriptions.build do |s|
-          s.id                = SecureRandom.uuid
-          s.native_language   = native_language
-          s.learning_language = ll
-          s.school_year       = sy
-          s.used_licenses     = 0
-          s.bought_licenses   = 0
-          s.price             = 0
-        end
-      end
-    end.flatten
-  end
-
-  def subscription_for(native_language, learning_language, school_year)
-    subscriptions_for(native_language, learning_language, school_year).first
-  end
-
-  PurchasingNotEnoughLicenses = Class.new(StandardError)
-
-  def buy_subscription(native_language, learning_language, school_year, bought_licenses, at)
-    s = subscription_for(native_language, learning_language, school_year)
-    raise PurchasingNotEnoughLicenses if s.bought_licenses + bought_licenses < 40
-    price = SubscriptionPriceCalculator.new(school_year, bought_licenses, at).price
-
-    purchase = purchases.build do |p|
-      p.id                = SecureRandom.uuid
-      p.native_language   = native_language
-      p.learning_language = learning_language
-      p.school_year       = school_year
-      p.bought_licenses   = bought_licenses
-      p.price             = price
-      p.purchased_at      = at
-    end
-
-    s.bought_licenses += purchase.bought_licenses
-    s.price += purchase.price
-    s
-  end
-
-  def cancel_subscription(native_language, learning_language, school_year, at)
-    s = subscription_for(native_language, learning_language, school_year)
-    purchases.build do |p|
-      p.id                = SecureRandom.uuid
-      p.native_language   = native_language
-      p.learning_language = learning_language
-      p.school_year       = school_year
-      p.bought_licenses   = -s.bought_licenses
-      p.price             = s.price * BigDecimal.new(-1)
-      p.purchased_at      = at
-    end
-
-    s = subscription_for(native_language, learning_language, school_year)
-    s.bought_licenses = 0
-    s.price = 0
-    s
-  end
-
-  # some domain methods removed
-end
-          </code></pre>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#1e5a56" data-background-transition="slide" -->
-          ### Not a single save()
-          ### Boundaries cannot cross because not_activerecord
+          ## GUI
+
+![](./password.png)
+
+_If you want users to update all information except the password itself, you can use update_without_password provided by Devise and then proceed to implement the views._
+
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#263d71" data-background-transition="slide" -->
-          ## Aggregate DB
+          ## From wiki
 
           <pre><code data-trim contenteditable class="ruby">
-class BillingDB
-  def with_billing(school_id)
-    ActiveRecord::Base.transaction do
-      Billing.find(school_id).lock!
-      b = Billing.preload(:licenses, :subscriptions, :purchases).find(school_id)
-      value = yield b
-      b.save!
-      value
+class RegistrationsController < Devise::RegistrationsController
+  def update
+    @user = User.find(current_user.id)
+
+    successfully_updated = if needs_password?(@user, params)
+      @user.update_with_password(devise_parameter_sanitizer.sanitize(:account_update))
+    else
+      # remove the virtual current_password attribute
+      # update_without_password doesn't know how to ignore it
+      params[:user].delete(:current_password)
+      @user.update_without_password(devise_parameter_sanitizer.sanitize(:account_update))
     end
+
+    if successfully_updated
+      set_flash_message :notice, :updated
+      # Sign in the user bypassing validation in case their password changed
+      sign_in @user, :bypass => true
+      redirect_to after_update_path_for(@user)
+    else
+      render "edit"
+    end
+  end
+
+  private
+
+  # check if we need password to update user data
+  # ie if password or email was changed
+  # extend this as needed
+  def needs_password?(user, params)
+    user.email != params[:user][:email] ||
+      params[:user][:password].present?
   end
 end
           </code></pre>
-
-          Plays with autosave: true. Only new/changed objects saved
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#546cc6" data-background-transition="slide" -->
-          ## Table reuse as intermediary step
+          ## From devise code
 
           <pre><code data-trim contenteditable class="ruby">
-class School < ActiveRecord::Base
-  # does not know anything about the associations in Billing module
-end
+def update_with_password(params, *options)
+  current_password = params.delete(:current_password)
 
-class Billing < ActiveRecord::Base
-  self.table_name = "schools"
-
-  has_many :subscriptions, class_name: "::School::Billing::Subscription", foreign_key: "school_id", autosave: true
-  has_many :licenses,      class_name: "::School::Billing::License",      foreign_key: "school_id", autosave: true
-  has_many :purchases,     class_name: "::School::Billing::Purchase",     foreign_key: "school_id", autosave: true
-end
-
-Billing.find(school_id)
-          </code></pre>
-          </script>
-        </section>
-
-        <section data-markdown>
-          <script type="text/template">
-          <!-- .slide: data-transition="linear" data-background="#2d1c55" data-background-transition="slide" -->
-          ## Tests don't need to save()
-
-          <pre><code data-trim contenteditable class="ruby">
-context "changing licenses" do
-  before do
-    billing.used_licenses(111, "de", "en", sy_2012_2013, at = Time.new(2012, 10, 1) )
-    billing.used_licenses([222, 333], "de", ["fr", "es"], sy_2012_2013, at = Time.new(2012, 10, 2) )
+  if params[:password].blank?
+    params.delete(:password)
+    params.delete(:password_confirmation) if params[:password_confirmation].blank?
   end
 
-  specify "terminates unused licenses for languages no longer learnt and creates new ones for new languages" do
-    billing.changed_used_licenses([222], "de", %w(fr es), %w(es en), sy_2012_2013, at = Time.new(2012, 10, 3) )
-    expect(billing.licenses).to have(6).elements
-    expect(billing.licenses.find{|l| l.pupil_id == 222 && l.learning_language == "es" }.deactivated_at).to be_nil
-    expect(billing.licenses.find{|l| l.pupil_id == 222 && l.learning_language == "fr" }.deactivated_at).to eq(at)
-
-    license = billing.licenses[5]
-    expect(license.id).to be_present
-    expect(license.pupil_id).to eq(222)
-    expect(license.activated_at).to eq(at)
-    expect(license.native_language).to eq("de")
-    expect(license.learning_language).to eq("en")
-
-    subscription = billing.subscription_for("de", "en", sy_2012_2013)
-    expect(subscription.used_licenses).to     eq(2)
-
-    subscription = billing.subscription_for("de", "fr", sy_2012_2013)
-    expect(subscription.used_licenses).to     eq(1)
-
-    subscription = billing.subscription_for("de", "es", sy_2012_2013)
-    expect(subscription.used_licenses).to     eq(2)
+  result = if valid_password?(current_password)
+    update_attributes(params, *options)
+  else
+    self.assign_attributes(params, *options)
+    self.valid?
+    self.errors.add(:current_password, current_password.blank? ? :blank : :invalid)
+    false
   end
+
+  clean_up_passwords
+  result
+end
+
+def update_without_password(params, *options)
+  params.delete(:password)
+  params.delete(:password_confirmation)
+
+  result = update_attributes(params, *options)
+  clean_up_passwords
+  result
 end
           </code></pre>
           </script>
@@ -831,85 +471,73 @@ end
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#86472d" data-background-transition="slide" -->
-          ## In memory DB for Aggregate
+          ## Maybe separate view for updating credentials wouldn't be that bad?
 
-          <pre><code data-trim contenteditable class="ruby">
-class BillingInMemoryDB
-  def initialize
-    @billings = []
-  end
-
-  def with_billing(school_id)
-    school_id = school_id.to_i
-    billing   = @billings.find{|b| b.id == school_id }
-    billing ||= (@billings << Billing.new.tap{|b| b.id = b.name = school_id}).last
-    value = yield billing
-    value
-  end
-end
-          </code></pre>
-          </script>
-        </section>
-
-        <section data-markdown>
-          <script type="text/template">
-          <!-- .slide: data-transition="linear" data-background="#296a7b" data-background-transition="slide" -->
-          ## What makes a good Unit? ;)
-          
-          <pre><code data-trim contenteditable class="ruby">
-context "terminate licenses" do
-  before do
-    billing.used_licenses(111, "de", "en", sy_2012_2013, at = Time.new(2012, 10, 1) )
-    billing.used_licenses([222, 333], "de", ["fr", "es"], sy_2012_2013, at = Time.new(2012, 10, 2) )
-    billing.changed_used_licenses([222], "de", %w(fr es), %w(es en), sy_2012_2013, at = Time.new(2012, 10, 3) )
-  end
-
-  specify "deactives licenses and lowers their counter in subscription" do
-    billing.terminated_licenses([222, 333], "de", "es", sy_2012_2013, at = Time.new(2012, 10, 4))
-    expect(billing.licenses).to have(6).elements
-    # ...
-  end
-end
-          </code></pre>
-
-          Test flow, not a single method
           </script>
         </section>
 
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#161c09" data-background-transition="slide" -->
-          ## In memory DBs tested with normal implementation
+          ## So what am I trying to say ... ?
 
           <pre><code data-trim contenteditable class="ruby">
-describe Test::InMemoryProgressDB do
-  it_should_behave_like "ProgressDB"
-end
-
-describe ProgressDB do
-  it_should_behave_like "ProgressDB"
-end
-
-shared_examples_for "ProgressDB" do
-  specify "integration flow" do
-    training_id = 1
-    lesson_id   = 2
-    student_id  = 3
-
-    subject.save_known_training_progress_level(training_id, lesson_id, student_id, 1)
-
-    progress = subject.find_all_by_user_and_lessons(student_id, lesson_id)
-    expect(progress).to have(1).element
-
-    element = progress.first
-    expect(element.training_id).to eq(training_id)
-    expect(element.lesson_id).to   eq(lesson_id)
-    expect(element.student_id).to  eq(student_id)
-    expect(element.level).to       eq(1)
-    # ...
+module Auth
+  class UserCredentials
+    devise :database_authenticatable, :registerable,
+      :recoverable, :rememberable, :trackable, :validatable,
+      :token_authenticatable, :lockable, :timeoutable, :omniauthable,
+      :remember_for => 6.months
   end
 end
           </code></pre>
+
+          _Authentication_ module does not sound so bad.
+          </script>
+        </section>
+
+        <section data-markdown style="">
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="#2d1c55" data-background-transition="slide" -->
+            ## Authentication knows which user was authenticated
+
+            `User` knows nothing about possible authentication methods such as _password_ for WEB, _token_ per mobile device etc.
+          </script>
+        </section>
+
+        <section data-markdown>
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="#86472d" data-background-transition="slide" -->
+          ## This is probably what you have...
+          </script>
+        </section>
+
+        <section data-markdown>
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="./slide-54-638.jpg" data-background-transition="slide" -->
+          </script>
+        </section>
+
+        <section data-markdown>
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="#42b53c" data-background-transition="slide" -->
+          ## This is what you might consider having...
+          </script>
+        </section>
+
+        <section data-markdown>
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="./slide-55-638.jpg" data-background-transition="slide" -->
+          </script>
+        </section>
+
+        <section data-markdown>
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="#42b53c" data-background-transition="slide" -->
+          Maybe logins, passwords, tokens, emails (duplicated) belong to _Auth_ module and the rest of your system
+          couldn't care less about them?
+
+          Think about it next time you add devise to your `User` module, mkay? 😉
           </script>
         </section>
 
@@ -918,11 +546,8 @@ end
           <!-- .slide: data-transition="linear" data-background="#161c43" data-background-transition="slide" -->
           ## Read more
 
-          * http://www.amazon.com/Domain-Driven-Design-Tackling-Complexity-Software/dp/0321125215
-          * http://martinfowler.com/bliki/ValueObject.html
-          * http://martinfowler.com/bliki/Aggregate.html
-          * http://fishbowl.pastiche.org/2014/05/16/no_really_what_web_developers/
-          * http://www.slideshare.net/jeppec/soa-and-event-driven-architecture-soa-20 (slides: 55, 76, 80)
+          * https://github.com/plataformatec/devise
+          * http://www.slideshare.net/jeppec/soa-and-event-driven-architecture-soa-20
           </script>
         </section>
 
