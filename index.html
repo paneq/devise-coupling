@@ -48,6 +48,18 @@
 		<!--[if lt IE 9]>
 		<script src="lib/js/html5shiv.js"></script>
 		<![endif]-->
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-723971-9']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+    </script>
 	</head>
 
 	<body>
@@ -558,15 +570,28 @@ end
         <section data-markdown>
           <script type="text/template">
           <!-- .slide: data-transition="linear" data-background="#161c43" data-background-transition="slide" -->
-          ## Read more
+          ## Read more on this topic
 
           * https://github.com/plataformatec/devise
           * http://www.slideshare.net/jeppec/soa-and-event-driven-architecture-soa-20
           </script>
         </section>
 
+        <section data-markdown>
+          <script type="text/template">
+          <!-- .slide: data-transition="linear" data-background="#4d7e65" data-background-transition="slide" -->
+            ## People also liked reading from us
+
+            [• 3 ways to do eager loading (preloading) in Rails 3 & 4](http://blog.arkency.com/2013/12/rails4-preloading/)
+
+            [• Value Objects and Aggregates in Active Record](http://pankowecki.pl/ddd/index.html)
+
+            [• Developers Oriented Project Management](http://pankowecki.pl/4developers/index.html)
+          </script>
+        </section>
+
         <section data-transition="linear" data-background-transition="slide" data-background="#2e4e8b">
-          <h2>Subscribe to our newsletter to get more content like this</h2>
+          <h2>Subscribe to our Arkency newsletter to get more content like this</h2>
           <form action="http://arkency.us5.list-manage1.com/subscribe/post?u=1bb42b52984bfa86e2ce35215&amp;id=4cee302d8a&amp;group[15297]=1" method="post" id="newsletter-form" name="newsletter-form" class="validate" target="_blank" novalidate="">
             <div>
               <input type="email" value="" name="EMAIL" class="email" id="newsletter-email" placeholder="your email address" required="">
